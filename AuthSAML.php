@@ -129,12 +129,24 @@ class AuthSAML extends AuthPluginBase {
         $this->storage = $this->get('storage_base', null, null, 'DbStorage');
 
         // Here you should handle subscribing to the events your plugin will handle
-        $this->subscribe('beforeLogin');
         $this->subscribe('newUserSession');
+        $this->subscribe('newSurveySettings');
+        $this->subscribe('beforeLogin');
+        $this->subscribe('beforeSurveyPage');
+        $this->subscribe('beforeSurveySettings');
         $this->subscribe('afterLogout');
+
 
         if (!$this->get('force_saml_login', null, null, false)) {
             $this->subscribe('newLoginForm');
+        }
+    }
+
+    public function newSurveySettings() {
+        $oEvent = $this->getEvent();
+        //self::__init();
+        foreach ($oEvent->get('settings') as $name => $value) {
+            $this->set($name, $value, 'Survey', $oEvent->get('survey'));
         }
     }
 
@@ -148,6 +160,32 @@ class AuthSAML extends AuthPluginBase {
             $this->setAuthPlugin();
             $this->newUserSession();
         }
+    }
+
+    public function beforeSurveySettings() {
+        $oEvent = $this->event;
+        $iSurveyId = $oEvent->get('survey');
+        $bUse = $this->get('bUse', 'Survey', $iSurveyId);
+        $oEvent->set("surveysettings.{$this->id}", array(
+            'name' => get_class($this),
+            'settings' => array(
+                'bUse' => array(
+                    'type' => 'select',
+                    'options' => array(
+                        0 => 'No',
+                        1 => 'Yes'
+                    ),
+                    'default' => 0,
+                    'label' => 'Use Auth SAML',
+                    'current' => $bUse
+                )
+            )
+        ));
+        //TODO: check tokens table when YES
+    }
+
+    public function beforeSurveyPage() {
+        //TODO
     }
 
     public function afterLogout() {
