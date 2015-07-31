@@ -1,7 +1,7 @@
 limesurvey-saml  (version 0.1)
 ==============================
 
-SAML Authentication plugin for limesurvey (based on simpleSAMLphp)
+SAML Authentication plugin for limesurvey (based on simpleSAMLphp), adapted to support SAML Authentication at survey. Based on https://github.com/Shnoulle/LS-replaceRegister.
 
 The limesurvey-saml-0.1 works with limesurvey 2.0.5
 
