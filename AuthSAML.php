@@ -11,10 +11,16 @@
  * other free or open source software licenses.
  */
 
+/*
+ * TODO: Localization
+ * 
+ */
+
 class AuthSAML extends AuthPluginBase {
 
     protected $storage = 'DbStorage';
     protected $ssp = null;
+    protected $attributes = null;
     static protected $description = 'SAML authentication plugin';
     static protected $name = 'SAML';
     protected $settings = array(
@@ -40,8 +46,18 @@ class AuthSAML extends AuthPluginBase {
         ),
         'saml_name_mapping' => array(
             'type' => 'string',
-            'label' => 'SAML attributed used as name',
+            'label' => 'SAML attributed used as Common name',
             'default' => 'cn',
+        ),
+        'saml_surname_mapping' => array(
+            'type' => 'string',
+            'label' => 'SAML attributed used as Surname',
+            'default' => 'sn',
+        ),
+        'saml_givenname_mapping' => array(
+            'type' => 'string',
+            'label' => 'SAML attributed used as Given name',
+            'default' => 'givenName',
         ),
         'authtype_base' => array(
             'type' => 'string',
@@ -52,6 +68,15 @@ class AuthSAML extends AuthPluginBase {
             'type' => 'string',
             'label' => 'Storage base',
             'default' => 'DbStorage',
+        ),
+        'pluginIdpAttributes' => array(
+            'help' => 'Each IdPAttribute must have the label and options entries',
+            'type' => 'json',
+            'label' => 'IdP Attributes',
+            'editorOptions' => array(
+                'name' => 'idpAttributes',
+                'mode' => 'tree',
+            ),
         ),
         'auto_create_users' => array(
             'type' => 'checkbox',
@@ -127,87 +152,195 @@ class AuthSAML extends AuthPluginBase {
         parent::__construct($manager, $id);
 
         $this->storage = $this->get('storage_base', null, null, 'DbStorage');
+        $this->get_saml_instance();
+        $this->attributes = $this->ssp->getAttributes();
 
         // Here you should handle subscribing to the events your plugin will handle
         $this->subscribe('newUserSession');
         $this->subscribe('newSurveySettings');
+        $this->subscribe('beforeActivate');
         $this->subscribe('beforeLogin');
         $this->subscribe('beforeSurveyPage');
         $this->subscribe('beforeSurveySettings');
         $this->subscribe('afterLogout');
 
-
         if (!$this->get('force_saml_login', null, null, false)) {
             $this->subscribe('newLoginForm');
         }
     }
+    /**
+     * Check the required IdP Attribute entries(label and options)
+     *
+     * @return none
+     */
+    public function beforeActivate() {
+        $oEvent = $this->event;
+        $aPluginIdpAttributes = json_decode($this->get('pluginIdpAttributes', null, null, true), true);
 
-    public function newSurveySettings() {
-        $oEvent = $this->getEvent();
-        //self::__init();
-        foreach ($oEvent->get('settings') as $name => $value) {
-            $this->set($name, $value, 'Survey', $oEvent->get('survey'));
+        foreach ($aPluginIdpAttributes as $idpAttribute => $values) {
+            if (!isset($values['label']) || !isset($values['options'])) {
+                $oEvent->set('success', false);
+                $oEvent->set('message', "Problem on IdP Attribute '{$idpAttribute}' : minimal JSON structure (label, options).");
+                break;
+            }
         }
     }
 
     public function beforeLogin() {
-        $ssp = $this->get_saml_instance();
 
         if ($this->get('force_saml_login', null, null, false)) {
-            $ssp->requireAuth();
+            $this->ssp->requireAuth();
         }
-        if ($ssp->isAuthenticated()) {
+        if ($this->ssp->isAuthenticated()) {
             $this->setAuthPlugin();
             $this->newUserSession();
         }
     }
-
+    
+    /**
+     * Create dynamically the IdP options defined at SAML plugin
+     *
+     * @return none
+     */
     public function beforeSurveySettings() {
         $oEvent = $this->event;
         $iSurveyId = $oEvent->get('survey');
         $bUse = $this->get('bUse', 'Survey', $iSurveyId);
+        $aSurveyIdpAttributes = json_decode($this->get('surveyIdpAttributes', 'Survey', $iSurveyId), true);
+        $aPluginIdpAttributes = json_decode($this->get('pluginIdpAttributes', null, null, true), true);
+        //Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('publicurl') . "plugins/AuthSAML/assets/lib.js");
+
+        $aSettings = array(
+            'bUse' => array(
+                'type' => 'select',
+                'help' => 'The tokens must be initialized and public registration must be off.',
+                'options' => array(
+                    0 => 'No',
+                    1 => 'Yes'
+                ),
+                'default' => 0,
+                'label' => 'Use Auth SAML',
+                'current' => $bUse
+        ));
+        
+        foreach ($aPluginIdpAttributes as $idpAttribute => $values) {
+            $aSettings[$idpAttribute] = array(
+                'type' => 'select',
+                'options' => $values['options'],
+                'label' => $values['label'],
+                'current' => $aSurveyIdpAttributes[$idpAttribute],
+            );
+        }
+
         $oEvent->set("surveysettings.{$this->id}", array(
             'name' => get_class($this),
-            'settings' => array(
-                'bUse' => array(
-                    'type' => 'select',
-                    'options' => array(
-                        0 => 'No',
-                        1 => 'Yes'
-                    ),
-                    'default' => 0,
-                    'label' => 'Use Auth SAML',
-                    'current' => $bUse
-                )
-            )
+            'settings' => $aSettings
         ));
-        //TODO: check tokens table when YES
     }
 
     public function beforeSurveyPage() {
-        //TODO
+
+        $oEvent = $this->event;
+        $iSurveyId = $oEvent->get('surveyId');
+        $bUse = $this->get('bUse', 'Survey', $iSurveyId);
+
+        if ($bUse) { //Only private surveys with authsaml plugin enabled
+            if ($this->ssp->isAuthenticated()) { //Only idp users                
+                $sLanguage = Yii::app()->request->getParam('lang');
+                $aSurveyInfo = getSurveyInfo($iSurveyId, $sLanguage);
+                $aSurveyIdpAttributes = array_diff(json_decode($this->get('surveyIdpAttributes', 'Survey', $iSurveyId), true), array('none'));
+
+                if ($this->checkIdpAttributes($aSurveyIdpAttributes)) {
+                    $oToken = TokenDynamic::model($iSurveyId)->find('email=:email', array(':email' => $this->getUserMail()));
+
+                    if ($oToken) { //Allow survey access if the token is given
+                        if (Yii::app()->request->getParam('token')) {
+                            return;
+                        }
+                        $sToken = $oToken->token;
+                    } else {//Creation of the token
+                        $oToken = Token::create($iSurveyId);
+                        $oToken->firstname = $this->getUserGivenName();
+                        $oToken->lastname = $this->getUserSurName();
+                        $oToken->email = $this->getUserMail();
+                        $oToken->emailstatus = 'OK';
+                        $oToken->language = $sLanguage;
+                        if ($aSurveyInfo['startdate']) {
+                            $oToken->validfrom = $aSurveyInfo['startdate'];
+                        }
+                        if ($aSurveyInfo['expires']) {
+                            $oToken->validuntil = $aSurveyInfo['expires'];
+                        }
+                        $oToken->save();
+                        $iTokenId = $oToken->tid;
+                        $sToken = TokenDynamic::model($iSurveyId)->createToken($iTokenId);
+                    }
+                    if ($sToken) {
+                        $surveylink = App()->createAbsoluteUrl("/survey/index/sid/{$iSurveyId}", array('token' => $sToken));
+                        header('Location: ' . $surveylink);
+                    }
+                } else {
+                    $aReplacementFields = array();
+                    $aReplacementFields["{ADMINNAME}"] = $aSurveyInfo['adminname'];
+                    $aReplacementFields["{ADMINEMAIL}"] = $aSurveyInfo['adminemail'];
+                    $sLanguage = Yii::app()->request->getParam('lang', '');
+                    if ($sLanguage == "") {
+                        $sLanguage = Survey::model()->findByPk($iSurveyId)->language;
+                    }
+                    $aSurveyInfo = getSurveyInfo($iSurveyId, $sLanguage);
+                    $sTemplatePath = $aData['templatedir'] = getTemplatePath($aSurveyInfo['template']);
+                    $sAttributesRequired = '';
+                    $sAttributesReceived = '';
+                    foreach ($aSurveyIdpAttributes as $key => $value) {
+                        $sAttributesRequired .= "<li>{$key}: \"{$value}\"</li>";
+                    }
+                    foreach (array_intersect_key($this->attributes, $aSurveyIdpAttributes) as $key => $value) {
+                        $sAttributesReceived .= "<li>{$key}: \"{$value[0]}\"</li>";
+                    }
+                    $sReturnHtml = "<div id='wrapper' class='message tokenmessage'>"
+                            . "<h3>Survey access denied</h3>\n"
+                            . "<p>IdP attributes required:</p>\n"
+                            . "<ul>$sAttributesRequired</ul><br />"
+                            . "<p>IdP attributes received:</p>\n"
+                            . "<ul>$sAttributesReceived</ul><br />"
+                            . "<p>Contact the survey administrator {ADMINNAME} at {ADMINEMAIL}</p>"
+                            . "</div>\n";
+                    $sReturnHtml = ReplaceFields($sReturnHtml, $aReplacementFields);
+                    ob_start(function($buffer, $phase) {
+                        App()->getClientScript()->render($buffer);
+                        App()->getClientScript()->reset();
+                        return $buffer;
+                    });
+                    ob_implicit_flush(false);
+                    sendCacheHeaders();
+                    doHeader();
+                    $aData['thissurvey'] = $aSurveyInfo;
+                    $aData['thissurvey'] = $aSurveyInfo;
+                    echo templatereplace(file_get_contents($sTemplatePath . '/startpage.pstpl'), array(), $aData);
+                    echo templatereplace(file_get_contents($sTemplatePath . '/survey.pstpl'), array(), $aData);
+                    echo $sReturnHtml;
+                    echo templatereplace(file_get_contents($sTemplatePath . '/endpage.pstpl'), array(), $aData);
+                    doFooter();
+                    ob_flush();
+                    App()->end();
+                }
+            } else {// Asks idp authentication
+                header('Location: ' . $this->ssp->getLoginURL());
+            }
+        }
     }
 
     public function afterLogout() {
-        $ssp = $this->get_saml_instance();
-        $ssp->logout(array('ReturnTo' => Yii::app()->getConfig('homeurl')));
-    }
-
-    public function newLoginForm() {
-        $authtype_base = $this->get('authtype_base', null, null, 'Authdb');
-
-        $ssp = $this->get_saml_instance();
-        $this->getEvent()->getContent($authtype_base)->addContent('<li><center>Click on that button to initiate SAML Login<br><a href="' . $ssp->getLoginURL() . '" title="SAML Login"><img src="' . Yii::app()->getConfig('imageurl') . '/saml_logo.gif"></a></center><br></li>', 'prepend');
+        $this->ssp->logout(array('ReturnTo' => Yii::app()->getConfig('homeurl')));
     }
 
     public function getUserName() {
         if ($this->_username == null) {
-            $ssp = $this->get_saml_instance();
-            $attributes = $this->ssp->getAttributes();
-            if (!empty($attributes)) {
+
+            if (!empty($this->attributes)) {
                 $saml_uid_mapping = $this->get('saml_uid_mapping', null, null, 'uid');
-                if (array_key_exists($saml_uid_mapping, $attributes) && !empty($attributes[$saml_uid_mapping])) {
-                    $username = $attributes[$saml_uid_mapping][0];
+                if (array_key_exists($saml_uid_mapping, $this->attributes) && !empty($this->attributes[$saml_uid_mapping])) {
+                    $username = $this->attributes[$saml_uid_mapping][0];
                     $this->setUsername($username);
                 }
             }
@@ -218,35 +351,89 @@ class AuthSAML extends AuthPluginBase {
     public function getUserCommonName() {
         $name = '';
 
-        $ssp = $this->get_saml_instance();
-        $attributes = $this->ssp->getAttributes();
-
-        if (!empty($attributes)) {
+        if (!empty($this->attributes)) {
             $saml_name_mapping = $this->get('saml_name_mapping', null, null, 'cn');
-            if (array_key_exists($saml_name_mapping, $attributes) && !empty($attributes[$saml_name_mapping])) {
-                $name = $attributes[$saml_name_mapping][0];
+            if (array_key_exists($saml_name_mapping, $this->attributes) && !empty($this->attributes[$saml_name_mapping])) {
+                $name = $this->attributes[$saml_name_mapping][0];
             }
         }
         return $name;
     }
 
+    public function getUserGivenName() {
+        $givenName = '';
+
+        if (!empty($this->attributes)) {
+            $saml_givenname_mapping = $this->get('saml_givenname_mapping', null, null, 'givenName');
+            if (array_key_exists($saml_givenname_mapping, $this->attributes) && !empty($this->attributes[$saml_givenname_mapping])) {
+                $givenName = $this->attributes[$saml_givenname_mapping][0];
+            }
+        }
+        return $givenName;
+    }
+
+    public function getUserSurName() {
+        $surName = '';
+
+        if (!empty($this->attributes)) {
+            $saml_surname_mapping = $this->get('saml_surname_mapping', null, null, 'sn');
+            if (array_key_exists($saml_surname_mapping, $this->attributes) && !empty($this->attributes[$saml_surname_mapping])) {
+                $surName = $this->attributes[$saml_surname_mapping][0];
+            }
+        }
+        return $surName;
+    }
+
     public function getUserMail() {
         $mail = '';
 
-        $ssp = $this->get_saml_instance();
-        $attributes = $this->ssp->getAttributes();
-        if (!empty($attributes)) {
+        if (!empty($this->attributes)) {
             $saml_mail_mapping = $this->get('saml_mail_mapping', null, null, 'mail');
-            if (array_key_exists($saml_mail_mapping, $attributes) && !empty($attributes[$saml_mail_mapping])) {
-                $mail = $attributes[$saml_mail_mapping][0];
+            if (array_key_exists($saml_mail_mapping, $this->attributes) && !empty($this->attributes[$saml_mail_mapping])) {
+                $mail = $this->attributes[$saml_mail_mapping][0];
             }
         }
         return $mail;
     }
 
+    public function checkIdpAttributes(array $idpAttributes) {
+
+        $check = true;
+
+        if (!empty($this->attributes)) {
+
+            foreach ($idpAttributes as $idpAttribute => $value) {
+                if (!array_key_exists($idpAttribute, $this->attributes) || empty($this->attributes[$idpAttribute]) || strtolower($this->attributes[$idpAttribute][0]) !== strtolower($value)) {
+                    $check = false;
+                    break;
+                }
+            }
+        }
+
+        return $check;
+    }
+
+    public function newSurveySettings() {
+        $oEvent = $this->getEvent();
+        $iSurveyId = $oEvent->get('survey');
+        $aSettings = $oEvent->get('settings');
+
+        //check tokens table when YES
+        if ($aSettings['bUse'] == 1 && !tableExists("tokens_{$iSurveyId}")) {
+            return;
+        }
+
+        $this->set('bUse', array_shift($aSettings), 'Survey', $oEvent->get('survey'));
+        $this->set('surveyIdpAttributes', json_encode($aSettings), 'Survey', $oEvent->get('survey'));
+    }
+
+    public function newLoginForm() {
+        $authtype_base = $this->get('authtype_base', null, null, 'Authdb');
+        $this->getEvent()->getContent($authtype_base)->addContent('<li><center>Click on that button to initiate SAML Login<br><a href="' . $this->ssp->getLoginURL() . '" title="SAML Login"><img src="' . Yii::app()->getConfig('imageurl') . '/saml_logo.gif"></a></center><br></li>', 'prepend');
+    }
+
     public function newUserSession() {
-        $ssp = $this->get_saml_instance();
-        if ($ssp->isAuthenticated()) {
+        if ($this->ssp->isAuthenticated()) {
 
             $sUser = $this->getUserName();
             $_SERVER['REMOTE_USER'] = $sUser;
@@ -279,7 +466,7 @@ class AuthSAML extends AuthPluginBase {
                         $auto_create_participant_panel = $this->get('auto_create_participant_panel', null, null, true);
                         if ($auto_create_participant_panel) {
 
-                            Permission::model()->insertSomeRecords(array('uid' => $iNewUID, 'permission' => 'participantpanel', 'entity' => 'global', 'create_p' => 1, 'read_p' => 1, 'update_p' => 1, 'delete_p' => 1, 'export_p' => 1));
+                            Permission::model()->insertSomeRecords(array('uid' => $iNewUID, 'permission' => 'participantpanel', 'entity' => 'global', 'create_p' => 1, 'read_p' => 0, 'update_p' => 0, 'delete_p' => 0, 'export_p' => 0));
                         }
 
                         // Set permissions: Settings & Plugins 
@@ -293,7 +480,7 @@ class AuthSAML extends AuthPluginBase {
                         $auto_create_surveys = $this->get('auto_create_surveys', null, null, true);
                         if ($auto_create_surveys) {
 
-                            Permission::model()->insertSomeRecords(array('uid' => $iNewUID, 'permission' => 'surveys', 'entity' => 'global', 'create_p' => 1, 'read_p' => 1, 'update_p' => 1, 'delete_p' => 1, 'export_p' => 1));
+                            Permission::model()->insertSomeRecords(array('uid' => $iNewUID, 'permission' => 'surveys', 'entity' => 'global', 'create_p' => 1, 'read_p' => 0, 'update_p' => 0, 'delete_p' => 0, 'export_p' => 0));
                         }
 
                         // Set permissions: Templates 
@@ -309,8 +496,6 @@ class AuthSAML extends AuthPluginBase {
 
                             Permission::model()->insertSomeRecords(array('uid' => $iNewUID, 'permission' => 'usergroups', 'entity' => 'global', 'create_p' => 1, 'read_p' => 1, 'update_p' => 1, 'delete_p' => 1, 'export_p' => 0));
                         }
-
-
 
                         // read again user from newly created entry
                         $oUser = $this->api->getUserByName($sUser);
