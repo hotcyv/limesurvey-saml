@@ -28,6 +28,8 @@ Basicamente, a mesma documentação do plugin original:
 
 Como configurar os atributos do IdP
 ====================
-Em um primeiro momento, o plugin possibilita a utilização da autenticação SAML no acesso ao questionário pelos respondentes, redirecionando-os ao IdP.
-No entanto, é possível, requerer também que, além da autenticação, o usuário possua determinado(s) atributo(s) retornados pelo IdP.
-Assim, inicialmente, deve-se informar na configuração do plugin os atributos providos pelo IdP e que ficarão disponíveis ao proprietário do questionário para aplicação de filtro.
+Inicialmente, o plugin possibilita a utilização da autenticação SAML no acesso ao questionário pelos respondentes, redirecionando-os ao IdP.
+
+No entanto, é possível requerer também que, além da autenticação, o usuário possua determinado(s) atributo(s) retornados pelo IdP.
+
+Assim, inicialmente, deve-se informar na configuração do plugin os atributos providos pelo IdP e que ficarão disponíveis ao proprietário do questionário para aplicação do filtro.
