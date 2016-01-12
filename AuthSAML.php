@@ -21,7 +21,7 @@ class AuthSAML extends AuthPluginBase {
     protected $storage = 'DbStorage';
     protected $ssp = null;
     protected $attributes = null;
-    static protected $description = 'SAML authentication plugin';
+    static protected $description = 'Plugin para autenticação SAML (Administração e acesso a questionário)';
     static protected $name = 'SAML';
     protected $settings = array(
         'simplesamlphp_path' => array(
@@ -117,11 +117,7 @@ class AuthSAML extends AuthPluginBase {
             'type' => 'checkbox',
             'label' => 'Auto update users',
             'default' => true,
-        ),
-        'force_saml_login' => array(
-            'type' => 'checkbox',
-            'label' => 'Force SAML login.',
-        ),
+        )
     );
 
     protected function get_saml_instance() {
@@ -163,11 +159,8 @@ class AuthSAML extends AuthPluginBase {
         $this->subscribe('beforeSurveyPage');
         $this->subscribe('beforeSurveySettings');
         $this->subscribe('afterLogout');
-
-        if (!$this->get('force_saml_login', null, null, false)) {
-            $this->subscribe('newLoginForm');
-        }
     }
+
     /**
      * Check the required IdP Attribute entries(label and options)
      *
@@ -178,7 +171,7 @@ class AuthSAML extends AuthPluginBase {
         $aPluginIdpAttributes = json_decode($this->get('pluginIdpAttributes', null, null, true), true);
 
         foreach ($aPluginIdpAttributes as $idpAttribute => $values) {
-            if (!isset($values['label']) || !isset($values['options'])) {
+            if (!isset($values['label']) || !isset($values['options']) || !isset($values['help'])) {
                 $oEvent->set('success', false);
                 $oEvent->set('message', "Problem on IdP Attribute '{$idpAttribute}' : minimal JSON structure (label, options).");
                 break;
@@ -188,15 +181,12 @@ class AuthSAML extends AuthPluginBase {
 
     public function beforeLogin() {
 
-        if ($this->get('force_saml_login', null, null, false)) {
-            $this->ssp->requireAuth();
-        }
-        if ($this->ssp->isAuthenticated()) {
+        if ($this->ssp->isAuthenticated() && isset($this->attributes['eduPersonAffiliation']) && in_array($this->attributes['eduPersonAffiliation'][0], array('faculty', 'employee'))) {
             $this->setAuthPlugin();
             $this->newUserSession();
         }
     }
-    
+
     /**
      * Create dynamically the IdP options defined at SAML plugin
      *
@@ -208,24 +198,24 @@ class AuthSAML extends AuthPluginBase {
         $bUse = $this->get('bUse', 'Survey', $iSurveyId);
         $aSurveyIdpAttributes = json_decode($this->get('surveyIdpAttributes', 'Survey', $iSurveyId), true);
         $aPluginIdpAttributes = json_decode($this->get('pluginIdpAttributes', null, null, true), true);
-        //Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('publicurl') . "plugins/AuthSAML/assets/lib.js");
 
         $aSettings = array(
             'bUse' => array(
                 'type' => 'select',
-                'help' => 'The tokens must be initialized and public registration must be off.',
+                'help' => 'Uma vez habilitado, somente usuários do IFSC (Discente, Docente e TAE) terão acesso ao questionário.',
                 'options' => array(
-                    0 => 'No',
-                    1 => 'Yes'
+                    0 => 'Não',
+                    1 => 'Sim'
                 ),
                 'default' => 0,
-                'label' => 'Use Auth SAML',
+                'label' => 'Ativar plugin?',
                 'current' => $bUse
         ));
-        
+
         foreach ($aPluginIdpAttributes as $idpAttribute => $values) {
             $aSettings[$idpAttribute] = array(
                 'type' => 'select',
+                'help' => $values['help'],
                 'options' => $values['options'],
                 'label' => $values['label'],
                 'current' => $aSurveyIdpAttributes[$idpAttribute],
@@ -292,18 +282,18 @@ class AuthSAML extends AuthPluginBase {
                     $sAttributesRequired = '';
                     $sAttributesReceived = '';
                     foreach ($aSurveyIdpAttributes as $key => $value) {
-                        $sAttributesRequired .= "<li>{$key}: \"{$value}\"</li>";
+                        $sAttributesRequired .= "<li>{$key} = \"{$value}\"</li>";
                     }
                     foreach (array_intersect_key($this->attributes, $aSurveyIdpAttributes) as $key => $value) {
-                        $sAttributesReceived .= "<li>{$key}: \"{$value[0]}\"</li>";
+                        $sAttributesReceived .= "<li>{$key} = \"{$value[0]}\"</li>";
                     }
                     $sReturnHtml = "<div id='wrapper' class='message tokenmessage'>"
-                            . "<h3>Survey access denied</h3>\n"
-                            . "<p>IdP attributes required:</p>\n"
+                            . "<h3>Acesso ao questionário não permitido!</h3>\n"
+                            . "<p>Informações de usuário necessárias:</p>\n"
                             . "<ul>$sAttributesRequired</ul><br />"
-                            . "<p>IdP attributes received:</p>\n"
+                            . "<p>Informações de usuário recebidas:</p>\n"
                             . "<ul>$sAttributesReceived</ul><br />"
-                            . "<p>Contact the survey administrator {ADMINNAME} at {ADMINEMAIL}</p>"
+                            . "<p>Entre em contato com o administrador do questionário: {ADMINNAME} ({ADMINEMAIL})</p>"
                             . "</div>\n";
                     $sReturnHtml = ReplaceFields($sReturnHtml, $aReplacementFields);
                     ob_start(function($buffer, $phase) {
@@ -396,14 +386,14 @@ class AuthSAML extends AuthPluginBase {
         return $mail;
     }
 
-    public function checkIdpAttributes(array $idpAttributes) {
+    public function checkIdpAttributes(array $aSurveyIdpAttributes) {
 
         $check = true;
 
         if (!empty($this->attributes)) {
 
-            foreach ($idpAttributes as $idpAttribute => $value) {
-                if (!array_key_exists($idpAttribute, $this->attributes) || empty($this->attributes[$idpAttribute]) || strtolower($this->attributes[$idpAttribute][0]) !== strtolower($value)) {
+            foreach ($aSurveyIdpAttributes as $surveyIdpAttribute => $value) {
+                if (!array_key_exists($surveyIdpAttribute, $this->attributes) || empty($this->attributes[$surveyIdpAttribute]) || strtolower($this->attributes[$surveyIdpAttribute][0]) !== strtolower($value)) {
                     $check = false;
                     break;
                 }
@@ -417,19 +407,14 @@ class AuthSAML extends AuthPluginBase {
         $oEvent = $this->getEvent();
         $iSurveyId = $oEvent->get('survey');
         $aSettings = $oEvent->get('settings');
-
+        
         //check tokens table when YES
         if ($aSettings['bUse'] == 1 && !tableExists("tokens_{$iSurveyId}")) {
-            return;
+            Token::createTable($iSurveyId);
         }
 
         $this->set('bUse', array_shift($aSettings), 'Survey', $oEvent->get('survey'));
         $this->set('surveyIdpAttributes', json_encode($aSettings), 'Survey', $oEvent->get('survey'));
-    }
-
-    public function newLoginForm() {
-        $authtype_base = $this->get('authtype_base', null, null, 'Authdb');
-        $this->getEvent()->getContent($authtype_base)->addContent('<li><center>Click on that button to initiate SAML Login<br><a href="' . $this->ssp->getLoginURL() . '" title="SAML Login"><img src="' . Yii::app()->getConfig('imageurl') . '/saml_logo.gif"></a></center><br></li>', 'prepend');
     }
 
     public function newUserSession() {
