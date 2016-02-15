@@ -34,28 +34,28 @@ No entanto, é possível requerer também que, além da autenticação, o usuár
 
 Os atributos são configurados via editor json, respeitando a seguinte estrutura em árvore de objetos:
 
-idpAtributtes {1}
-  idpAtributte1 {2}
-    label : Descrição do atributo1 que será apresentado ao proprietário do questionário
-    options {2}
-      value1 : Valor 1
-      value2 : Valor 2
-  idpAtributte2 {2}
-    label : Descrição do atributo2 que será apresentado ao proprietário do questionário
-    options {2}
-      value1 : Valor 1
-      value2 : Valor 2
-  ...
+    idpAtributtes {1}
+      idpAtributte1 {2}
+        label : Descrição do atributo1 que será apresentado ao proprietário do questionário
+        options {2}
+          value1 : Valor 1
+          value2 : Valor 2
+      idpAtributte2 {2}
+        label : Descrição do atributo2 que será apresentado ao proprietário do questionário
+        options {2}
+          value1 : Valor 1
+          value2 : Valor 2
+      ...
 
 Assim, caso deseje-se permitir apenas que usuários de um determinado segmento tenha acesso ao questionário, poderia-se configurar o plugin da seguinte forma: 
 
-idpAtributtes {1}
-  eduPersonAffiliation {2}
-    label : Restringir acesso a um segmento?
-    options {4}
-      none : Não
-      student : Discente
-      faculty : Docente
-      employee : Técnico Adminstrativo
+    idpAtributtes {1}
+      eduPersonAffiliation {2}
+        label : Restringir acesso a um segmento?
+        options {4}
+          none : Não
+          student : Discente
+          faculty : Docente
+          employee : Técnico Adminstrativo
       
 
