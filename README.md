@@ -47,7 +47,9 @@ Os atributos são configurados via editor json, respeitando a seguinte estrutura
           value2 : Valor 2
       ...
 
-Assim, caso deseje-se permitir apenas que usuários de um determinado segmento tenha acesso ao questionário, poderia-se configurar o plugin da seguinte forma: 
+Os itens idpAtributtes, label e options são obrigatórios. Ainda, no item options, para cada par chave-valor, o nome da chave deverá ser igual ao nome do atributo disponibilizado pelo IdP.
+
+Como exemplo, caso deseje-se permitir apenas que usuários de um determinado segmento tenha acesso ao questionário, poderia-se configurar o plugin da seguinte forma: 
 
     idpAtributtes {1}
       eduPersonAffiliation {2}
@@ -58,4 +60,4 @@ Assim, caso deseje-se permitir apenas que usuários de um determinado segmento t
           faculty : Docente
           employee : Técnico Adminstrativo
       
-
+Dessa forma, ao acessar a aba plugin na configuração do questionário, o proprietário poderá escolher qual segmento de usuários poderá responder o questionário.
