@@ -24,7 +24,7 @@ Documentação:
 Basicamente, a mesma documentação do plugin original:
 * [Como instalar e configurar o simpleSAMLphp](https://github.com/Frankniesten/limesurvey-saml#how-install-and-configure-simplesamlphp-as-sp)
 * [Como instalar e habilitar o plugin limesurvey SAML](https://github.com/Frankniesten/limesurvey-saml#how-install-and-enable-the-saml-plugin)
-* Como configurar os atributos do IdP
+* [Como configurar os atributos do IdP]((https://github.com/Frankniesten/limesurvey-saml#como-configurar-os-atributos-do-idp))
 
 Como configurar os atributos do IdP
 ====================
