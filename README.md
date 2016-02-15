@@ -1,7 +1,7 @@
-limesurvey-saml (customizado)
+limesurvey-saml (customização)
 ==============================
 
-Customização do plugin de autenticação SAML para o limesurvey (limesurvey-saml) que adiciona a autenticação também no acesso ao questionário. Customização baseada no plugin [LS-replaceRegister](https://github.com/Shnoulle/LS-replaceRegister).
+Modificação do plugin de autenticação SAML para o limesurvey (limesurvey-saml) que adiciona a autenticação também no acesso ao questionário. Customização baseada no plugin [LS-replaceRegister](https://github.com/Shnoulle/LS-replaceRegister).
 
 Plugin Limesurvey-saml: [Frankniesten/limesurvey-saml](https://github.com/Frankniesten/limesurvey-saml)
 
@@ -22,8 +22,8 @@ Documentação:
 ====================
 
 Basicamente, a mesma documentação do plugin original:
-* [Como instalar e configurar o simpleSAMLphp](https://github.com/hotcyv/limesurvey-saml#how-install-and-configure-simplesamlphp-as-sp)
-* [Como instalar e habilitar o plugin limesurvey SAML](https://github.com/hotcyv/limesurvey-saml#how-install-and-enable-the-saml-plugin)
+* [Como instalar e configurar o simpleSAMLphp](https://github.com/Frankniesten/limesurvey-saml#how-install-and-configure-simplesamlphp-as-sp)
+* [Como instalar e habilitar o plugin limesurvey SAML](https://github.com/Frankniesten/limesurvey-saml#how-install-and-enable-the-saml-plugin)
 * Como configurar os atributos do IdP
 
 Como configurar os atributos do IdP
